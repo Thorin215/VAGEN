@@ -61,6 +61,8 @@ tmux send-keys -t "$TRAIN_SESSION" "conda activate vagen" C-m
 tmux send-keys -t "$TRAIN_SESSION" "export CUDA_VISIBLE_DEVICES=$CUDA_DEVICES" C-m
 tmux send-keys -t "$TRAIN_SESSION" "export VLLM_ATTENTION_BACKEND=XFORMERS" C-m
 tmux send-keys -t "$TRAIN_SESSION" "export PYTHONHASHSEED=0" C-m
+tmux send-keys -t "$TRAIN_SESSION" "export http_proxy=\"http://127.0.0.1:17890/\"" C-m
+tmux send-keys -t "$TRAIN_SESSION" "export https_proxy=\"http://127.0.0.1:17890/\"" C-m
 tmux send-keys -t "$TRAIN_SESSION" "set -x" C-m
 
 # First create the dataset
@@ -81,7 +83,7 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     data.max_trajectory_length=2400 \\
     data.image_key=images \\
     data.truncation=left \\
-    actor_rollout_ref.model.path=Qwen/Qwen2.5-VL-3B-Instruct \\
+    actor_rollout_ref.model.path=/opt/liblibai-models/user-workspace2/users/wc/model/Qwen2.5-VL-3B-Instruct \\
     actor_rollout_ref.actor.optim.lr=1e-6 \\
     actor_rollout_ref.model.use_remove_padding=True \\
     actor_rollout_ref.actor.ppo_mini_batch_size=32 \\
