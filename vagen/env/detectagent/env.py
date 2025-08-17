@@ -1,148 +1,165 @@
-import gymnasium as gym
-from gymnasium import spaces
-import numpy as np
-# 根据您的需要导入其他库，例如用于图像处理的 OpenCV
-# import cv2 
+from vagen.env.base.base_env import BaseEnv
+# from vagen.env.svg.svg_utils import (process_and_rasterize_svg, is_valid_svg, load_svg_dataset)
+# from vagen.env.svg.score import calculate_total_score
+from vagen.env.utils.context_utils import parse_llm_raw_response, convert_numpy_to_PIL
+from vagen.env.utils.parse_utils import PARSE_FUNC_MAP
+from .env_config import DetectAgentEnvConfig
+from .tool import ToolCaller
 
-class DetectAgentEnv(gym.Env):
+import os
+import re
+import json
+import logging
+import random
+from PIL import Image
+from typing import Dict, Any, Optional, Tuple
+from pathlib import Path
+from datasets import Dataset
+
+class DetectAgentEnv(BaseEnv):
     """
-    一个用于检测任务的自定义环境，旨在与 M4Agent 或类似的 RL Agent 交互。
-
-    这个环境的假设是：
-    - **Observation**: 代表环境状态的图像或特征图 (例如, 256x256x3 的图像)。
-    - **Action**: 一个包含边界框坐标 (x, y, width, height) 和置信度分数的连续向量。
-    - **Reward**: 根据预测的边界框与真实目标之间的 IoU (Intersection over Union) 来计算。
-    - **Episode End**: 当 Agent 提交一个最终检测结果或达到最大步数时，一个 episode 结束。
+    DetectAgentEnv 是一个用于图像伪造检测的环境，继承自 BaseEnv。
+    它提供了与图像伪造检测任务相关的功能，包括初始化、重置、执行步骤等。
     """
-    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
 
-    def __init__(self, config=None):
-        """
-        初始化环境。
+    def __init__(self, config: DetectAgentEnvConfig):
+        super().__init__(config)
+        self.config = config
 
-        Args:
-            config (dict, optional): 环境的配置字典。
-                                     例如: {'image_path': 'path/to/images', 'max_steps': 100}
-        """
-        super(DetectAgentEnv, self).__init__()
+        self.total_reward = 0
+        self.reward = 0
 
-        # --- 配置加载 ---
-        # 您可以在这里加载数据集、设置路径等
-        self.config = config if config is not None else {}
-        self.image_dataset = self._load_dataset() # 待实现的函数
-        self.max_steps_per_episode = self.config.get('max_steps', 100)
-
-        # --- 定义动作空间 (Action Space) ---
-        # 假设 Agent 的动作是输出一个归一化的边界框 [x_center, y_center, width, height]
-        # 和一个置信度分数。所有值都在 [0, 1] 之间。
-        self.action_space = spaces.Box(low=0, high=1, shape=(5,), dtype=np.float32)
-
-        # --- 定义观测空间 (Observation Space) ---
-        # 假设观测是 256x256 的 RGB 图像。
-        # 值在 [0, 255] 范围内。
-        self.observation_space = spaces.Box(low=0, high=255, shape=(256, 256, 3), dtype=np.uint8)
-
-        # --- 环境状态变量 ---
+        self.prompt_format = self.config.get("prompt_format", "first_prompt")
+        self.max_steps = self.config.get("max_steps", 10)
         self.current_step = 0
-        self.current_image = None
-        self.ground_truth_box = None # 当前图像的真实边界框
 
-    def _load_dataset(self):
-        """
-        【待实现】加载您的图像和标注数据。
-        这应该返回一个易于索引的数据结构。
-        """
-        # 示例：返回一个包含 (image_path, annotation) 的列表
-        print("在此处实现您的数据集加载逻辑...")
-        return []
+        self.format_prompt_func = format_prompt[self.prompt_format]
 
-    def _get_next_item(self):
-        """
-        【待实现】从数据集中获取下一个图像和其真实标注。
-        """
-        # 示例：随机选择一个样本
-        # self.current_image = cv2.imread(...)
-        # self.ground_truth_box = ...
-        # 请确保图像被调整到 observation_space 定义的尺寸 (256, 256, 3)
-        print("在此处实现获取下一个数据样本的逻辑...")
-        # 返回一个虚拟的图像和边界框用于演示
-        dummy_image = np.random.randint(0, 256, size=(256, 256, 3), dtype=np.uint8)
-        dummy_box = np.array([0.5, 0.5, 0.2, 0.2]) # [x_c, y_c, w, h]
-        return dummy_image, dummy_box
+        self.parse_func = PARSE_FUNC_MAP[self.prompt_format]
+        self.tool_caller = ToolCaller()
+        self.image_path = self.config.get("image_path", "")
 
+        self.conversations = []
+        self.conversations.append(
+            {
+                "role": "user",
+                "content": [
+                    # {"type":"image", "format": self.prompt_format}
+                    # {""}
+                ]
+            }
+        )
 
-    def reset(self, seed=None, options=None):
-        """
-        重置环境到一个新的初始状态。
-        """
-        super().reset(seed=seed)
-
-        self.current_step = 0
+    def reset(self, seed=None) -> Dict[Dict, Dict]:
         
-        # 获取新的图像和标注
-        self.current_image, self.ground_truth_box = self._get_next_item()
-        
-        observation = self.current_image
-        info = self._get_info() # 获取辅助信息
 
-        return observation, info
 
-    def step(self, action):
-        """
-        在环境中执行一个步骤。
-        """
+    def step(self, action_str: str, dino_model=None, dreamsim_model=None) -> Tuple[Dict, float, bool, Dict]:
+        """Execute one step within the environment."""
         self.current_step += 1
 
-        # --- 计算奖励 (Reward) ---
-        # 【待实现】根据 action (预测框) 和 self.ground_truth_box (真实框) 计算奖励
-        # 这里使用 IoU (Intersection over Union) 作为一个常见的奖励函数
-        predicted_box = action[:4]
-        confidence = action[4]
+        # 解析动作字符串，提取动作类型和参数
+        rst = self.parse_func(action_str)
+
+        if rst["answer_content"] and (rst["answer_content"].strip() == "no" or rst["answer_content"].strip() == "yes"):
+            # 得到鉴定结果，终止这轮判断
+            done = True
+
+        if not rst["tool_content"]:
+            # 此轮没有使用工具或未正确输出名字
+            return 
         
-        # 您需要一个函数来计算 IoU
-        # reward = self.calculate_iou(predicted_box, self.ground_truth_box) * confidence
-        reward = np.random.rand() # 使用虚拟奖励
+        tool_name = rst["tool_content"]
 
-        # --- 判断 Episode 是否结束 ---
-        # 当达到最大步数或 Agent 做出最终决策时结束
-        terminated = self.current_step >= self.max_steps_per_episode
-        truncated = False # 如果有时间限制，可以设置为 True
+        if tool_name:
+            tool_result = self.tool_caller.call_tool(
+                tool_name,
+                {"image_path": self.image_path}
+            )
 
-        # --- 获取下一步的观测 ---
-        # 在这个简单的例子中，观测保持不变，因为 Agent 在同一张图上操作
-        # 在更复杂的场景中，观测可能会根据 Agent 的动作而改变
-        observation = self.current_image
-        info = self._get_info()
+        result_path = self.extract_result_path(tool_result)
 
-        return observation, reward, terminated, truncated, info
+        
+        # 更新对话记录
 
-    def _get_info(self):
+        if self.current_step >= self.max_steps:
+            self.prompt_format = self.config.get("prompt_format", "final_prompt")
+            self.conversations.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "format": self.prompt_format}
+                    ]
+                }
+            )
+        else :
+            self.prompt_format = self.config.get("prompt_format", "continue_prompt")
+            self.conversations.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "format": self.prompt_format}
+                    ]
+                }
+            )
+
+    def extract_result_path(tool_result: Dict) -> str:
+        """从工具返回结果中提取图片路径"""
+        if not tool_result.get('data'):
+            return ""
+        
+        data = tool_result['data']
+        return (
+            data.get("heatmap_path") or
+            data.get("sharpened_path") or 
+            data.get("ela_path") or
+            data.get("histogram_path") or
+            ""
+        )
+
+    def format_prompt(self, **kwargs) -> str:
         """
-        返回关于环境状态的辅助信息。
+        Format the prompt based on the current configuration and parameters.
+        
+        Args:
+            **kwargs: Additional parameters for formatting the prompt
+            
+        Returns:
+            str: The formatted prompt string
         """
-        return {
-            "current_step": self.current_step,
-            "ground_truth_box": self.ground_truth_box
-        }
+        return self.format_prompt_func(**kwargs)
 
-    def render(self):
+    def get_image(self, image_path: str) -> Image.Image:
         """
-        【可选】可视化环境。
+        Load an image from the specified path.
+        
+        Args:
+            image_path (str): The path to the image file
+            
+        Returns:
+            Image.Image: The loaded image
         """
-        # 在这里实现您的可视化逻辑，例如使用 OpenCV 或 Matplotlib
-        # 来显示图像和边界框。
-        pass
-
+        if not os.path.exists(image_path):
+            raise FileNotFoundError(f"Image file not found: {image_path}")
+        
+        return convert_numpy_to_PIL(image_path)
+    
     def close(self):
         """
-        清理环境资源。
+        Close the environment and release any resources.
         """
-        print("环境已关闭。")
+        # Implement any necessary cleanup here
+        pass
 
-    def calculate_iou(self, box1, box2):
+    def _render(self, init_obs=False):
+        """Render the current state of the environment.
+
+        return all the images and conversations in this step
         """
-        【待实现】计算两个边界框的 IoU。
-        假设 box 格式为 [x_center, y_center, width, height]。
-        """
-        # 在此实现您的 IoU 计算逻辑
-        return 0.0
+
+        if init_obs:
+            img = self.image_path
+        
+        format_prompt_text = 
+
+        

@@ -277,6 +277,105 @@ def parse_grounding_worldmodeling(response: str, special_token_list=None, action
         "format_correct": format_correct
     }
     
+def first_prompt(response: str) -> Dict:
+    """
+    Parse response in format: <think>...</think><region>...</region><answer>...</answer><tool>...</tool>
+    answert : yes/unsure/no
+
+    Returns a dict with keys:
+    - llm_raw_response: the original response
+    - llm_response: the response with <think>, <region>, <answer>, and <tool> tags
+    - think_content: the content inside <think> tag
+    - region_content: the content inside <region> tag
+    - answer_content: the content inside <answer> tag
+    - tool_content: the content inside <tool> tag
+    - format_correct: whether the response strictly follows the expected format
+    """
+
+    response = response.replace("<image>","")
+    # Pattern to check for content strictly in the expected format
+    strict_pattern = r'^\s*<think>(.*?)</think>\s*<region>(.*?)</region>\s*<answer>(.*?)</answer>\s*<tool>(.*?)</tool>\s*$'
+    strict_match = re.match(strict_pattern, response.strip(), re.DOTALL)
+    format_correct = strict_match is not None
+    
+    # Pattern to extract content from tags
+    extraction_pattern = r'<think>(.*?)</think>\s*<region>(.*?)</region>\s*<answer>(.*?)</answer>\s*<tool>(.*?)</tool>'
+    match = re.search(extraction_pattern, response, re.DOTALL)
+    
+    if not match:
+        think_content, region_content, answer_content, tool_content, actions = "", "", "", "", []
+        llm_response = ""
+    else:
+        think_content = match.group(1)
+        region_content = match.group(2)
+        answer_content = match.group(3)
+        tool_content = match.group(4)
+        
+        # if special_token_list is not None:
+        #     for special_token in special_token_list:
+        #         think_content = think_content.replace(special_token, "").strip()
+        #         region_content = region_content.replace(special_token, "").strip()
+        #         answer_content = answer_content.replace(special_token, "").strip()
+        #         tool_content = tool_content.replace(special_token, "").strip()
+                
+        # actions = [action.strip() for action in answer_content.split(action_sep) if action.strip()]
+        # if len(actions) > max_actions:
+        #     actions = actions[:max_actions]
+        #     answer_content = (" " + action_sep + " ").join(actions)
+
+        # llm_response = f"<think>{think_content.strip()}</think><region>{region_content.strip()}</region><answer>{answer_content.strip()}</answer><tool
+    return {
+        "llm_raw_response": response,
+        "llm_response": f"<think>{think_content.strip()}</think><region>{region_content.strip()}</region><answer>{answer_content.strip()}</answer><tool>{tool_content.strip()}</tool>",
+        "think_content": think_content,
+        "region_content": region_content,
+        "answer_content": answer_content,
+        "tool_content": tool_content,
+        "format_correct": format_correct
+    }
+
+def final_prompt(response: str) -> Dict:
+    """
+    Parse response in format: <think>...</think><region>...</region><answer>...</answer>
+    answert : yes/no
+
+    Returns a dict with keys:
+    - llm_raw_response: the original response
+    - llm_response: the response with <think>, <region>, <answer>, and <tool> tags
+    - think_content: the content inside <think> tag
+    - region_content: the content inside <region> tag
+    - answer_content: the content inside <answer> tag
+    - format_correct: whether the response strictly follows the expected format
+    """
+
+    response = response.replace("<image>","")
+    # Pattern to check for content strictly in the expected format
+    strict_pattern = r'^\s*<think>(.*?)</think>\s*<region>(.*?)</region>\s*<answer>(.*?)</answer>\s*$'
+    strict_match = re.match(strict_pattern, response.strip(), re.DOTALL)
+    format_correct = strict_match is not None
+    
+    # Pattern to extract content from tags
+    extraction_pattern = r'<think>(.*?)</think>\s*<region>(.*?)</region>\s*<answer>(.*?)</answer>'
+    match = re.search(extraction_pattern, response, re.DOTALL)
+
+    if not match:
+        think_content, region_content, answer_content, actions = "", "", "", []
+        llm_response = ""
+    else:
+        think_content = match.group(1)
+        region_content = match.group(2)
+        answer_content = match.group(3)
+    
+    return {
+        "llm_raw_response": response,
+        "llm_response": f"<think>{think_content.strip()}</think><region>{region_content.strip()}</region><answer>{answer_content.strip()}</answer>",
+        "think_content": think_content,
+        "region_content": region_content,
+        "answer_content": answer_content,
+        "format_correct": format_correct
+    }
+
+
 PARSE_FUNC_MAP = {
     "free_think": parse_freethink,
     "no_think": parse_no_think,
@@ -289,4 +388,7 @@ PARSE_FUNC_MAP = {
     "grounding_symbolic": parse_grounding,
     "worldmodeling_symbolic": parse_worldmodeling,
     "grounding_worldmodeling_symbolic": parse_grounding_worldmodeling,
+    "first_prompt": first_prompt,
+    "continue_prompt": first_prompt,
+    "final_prompt": final_prompt,
 }
