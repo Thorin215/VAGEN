@@ -1,20 +1,12 @@
 from vagen.env.base.base_env import BaseEnv
-# from vagen.env.svg.svg_utils import (process_and_rasterize_svg, is_valid_svg, load_svg_dataset)
-# from vagen.env.svg.score import calculate_total_score
-from vagen.env.utils.context_utils import parse_llm_raw_response, convert_numpy_to_PIL
 from vagen.env.utils.parse_utils import PARSE_FUNC_MAP
 from .env_config import DetectAgentEnvConfig
 from .tool import ToolCaller
+from .prompt import format_prompt as FORMAT_PROMPT_MAP, system_prompt as build_system_prompt
 
 import os
-import re
-import json
-import logging
-import random
 from PIL import Image
-from typing import Dict, Any, Optional, Tuple
-from pathlib import Path
-from datasets import Dataset
+from typing import Dict, Any, Optional, Tuple, List
 
 class DetectAgentEnv(BaseEnv):
     """
@@ -29,83 +21,117 @@ class DetectAgentEnv(BaseEnv):
         self.total_reward = 0
         self.reward = 0
 
-        self.prompt_format = self.config.get("prompt_format", "first_prompt")
+        # prompt format lifecycle: first_prompt -> continue_prompt (loop) -> final_prompt
+        self.prompt_format: str = "first_prompt"
+
         self.max_steps = self.config.get("max_steps", 10)
         self.current_step = 0
 
-        self.format_prompt_func = format_prompt[self.prompt_format]
+        # formatter function for current prompt
+        self.format_prompt_func = FORMAT_PROMPT_MAP[self.prompt_format]
 
         self.parse_func = PARSE_FUNC_MAP[self.prompt_format]
         self.tool_caller = ToolCaller()
-        self.image_path = self.config.get("image_path", "")
+        self.image_path: str = self.config.get("image_path", "")
 
-        self.conversations = []
-        self.conversations.append(
-            {
-                "role": "user",
-                "content": [
-                    # {"type":"image", "format": self.prompt_format}
-                    # {""}
-                ]
-            }
-        )
+        # conversation messages: each is {role: 'system'|'user'|'assistant', content: List[{'type':'text','text':...}|{'type':'image','path':...}]}
+        self.conversations: List[Dict[str, Any]] = []
 
-    def reset(self, seed=None) -> Dict[Dict, Dict]:
-        
+        # initialize on creation for convenience
+        self._init_conversations()
+
+    # ----------- public API required by BaseEnv -----------
+    def system_prompt(self) -> str:
+        """Return system prompt for the environment."""
+        return build_system_prompt(format=self.prompt_format)
+
+    def reset(self, seed=None) -> Tuple[Dict, Dict]:
+        """Reset environment and return initial observation and info."""
+        self.current_step = 0
+        self.total_reward = 0
+        self.reward = 0
+        self.prompt_format = "first_prompt"
+        self.format_prompt_func = FORMAT_PROMPT_MAP[self.prompt_format]
+        self.parse_func = PARSE_FUNC_MAP[self.prompt_format]
+
+        self._init_conversations()
+
+        obs = self._build_observation_from_last_user()
+        info = {
+            "metrics": {},
+            "llm_raw_response": "",
+            "llm_response": "",
+            "conversations": self.conversations,
+        }
+        return obs, info
 
 
     def step(self, action_str: str, dino_model=None, dreamsim_model=None) -> Tuple[Dict, float, bool, Dict]:
         """Execute one step within the environment."""
         self.current_step += 1
 
-        # 解析动作字符串，提取动作类型和参数
+        # 解析 LLM 输出
         rst = self.parse_func(action_str)
 
-        if rst["answer_content"] and (rst["answer_content"].strip() == "no" or rst["answer_content"].strip() == "yes"):
-            # 得到鉴定结果，终止这轮判断
+        # 默认未结束
+        done = False
+        if rst.get("answer_content") and rst["answer_content"].strip().lower() in {"no", "yes"}:
             done = True
 
-        if not rst["tool_content"]:
-            # 此轮没有使用工具或未正确输出名字
-            return 
+        # 记录 assistant 的原始响应
+        self._append_assistant_message(text=rst.get("llm_raw_response", action_str))
         
-        tool_name = rst["tool_content"]
+        tool_result = None
+        result_path = None
+        tool_name = (rst.get("tool_content") or "").strip()
 
-        if tool_name:
-            tool_result = self.tool_caller.call_tool(
-                tool_name,
-                {"image_path": self.image_path}
-            )
+        if tool_name and not done:
+            # 调用工具
+            tool_result = self.tool_caller.call_tool(tool_name, {"image_path": self.image_path})
+            result_path = self.extract_result_path(tool_result)
 
-        result_path = self.extract_result_path(tool_result)
+        # 根据状态决定下一个用户提示类型
+        if done or self.current_step >= self.max_steps:
+            self.prompt_format = "final_prompt"
+        else:
+            self.prompt_format = "continue_prompt"
+        self.format_prompt_func = FORMAT_PROMPT_MAP[self.prompt_format]
+        self.parse_func = PARSE_FUNC_MAP[self.prompt_format]
 
-        
-        # 更新对话记录
+        # 追加下一条用户消息（可能包含工具结果图 + 新提示）
+        next_prompt_text = self.format_prompt()
+        user_contents: List[Dict[str, Any]] = []
+        # 工具结果优先展示，如果没有则仍展示原图
+        img_to_show = result_path if result_path else self.image_path
+        if img_to_show:
+            user_contents.append({"type": "image", "path": img_to_show})
+        user_contents.append({"type": "text", "text": next_prompt_text})
+        # 如果有工具消息，把工具反馈文字也加进来（便于模型参考）
+        if tool_result and tool_result.get("message"):
+            user_contents.append({"type": "text", "text": f"[tool:{tool_name}] {tool_result['message']}"})
+        self._append_user_message(contents=user_contents)
 
-        if self.current_step >= self.max_steps:
-            self.prompt_format = self.config.get("prompt_format", "final_prompt")
-            self.conversations.append(
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "image", "format": self.prompt_format}
-                    ]
-                }
-            )
-        else :
-            self.prompt_format = self.config.get("prompt_format", "continue_prompt")
-            self.conversations.append(
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "image", "format": self.prompt_format}
-                    ]
-                }
-            )
+        # 简单奖励：格式正确给微小奖励
+        step_reward = 1.0 if rst.get("format_correct") else 0.0
+        self.total_reward += step_reward
 
-    def extract_result_path(tool_result: Dict) -> str:
+        # 生成新的观测
+        obs = self._build_observation_from_last_user()
+        info = {
+            "metrics": {
+                "format_correct": bool(rst.get("format_correct")),
+            },
+            "llm_raw_response": rst.get("llm_raw_response", action_str),
+            "llm_response": rst.get("llm_response", action_str),
+            "parsed": rst,
+            "conversations": self.conversations,
+            "tool_result": tool_result,
+        }
+        return obs, step_reward, done, info
+
+    def extract_result_path(self, tool_result: Optional[Dict]) -> str:
         """从工具返回结果中提取图片路径"""
-        if not tool_result.get('data'):
+        if not tool_result or not tool_result.get('data'):
             return ""
         
         data = tool_result['data']
@@ -139,10 +165,9 @@ class DetectAgentEnv(BaseEnv):
         Returns:
             Image.Image: The loaded image
         """
-        if not os.path.exists(image_path):
+        if not image_path or not os.path.exists(image_path):
             raise FileNotFoundError(f"Image file not found: {image_path}")
-        
-        return convert_numpy_to_PIL(image_path)
+        return Image.open(image_path).convert("RGB")
     
     def close(self):
         """
@@ -151,15 +176,76 @@ class DetectAgentEnv(BaseEnv):
         # Implement any necessary cleanup here
         pass
 
-    def _render(self, init_obs=False):
-        """Render the current state of the environment.
+    def _render(self, init_obs: bool = False) -> Dict[str, Any]:
+        """Return a lightweight view for UI: latest image and conversations."""
+        last_user = None
+        for msg in reversed(self.conversations):
+            if msg.get("role") == "user":
+                last_user = msg
+                break
+        latest_image_path = None
+        if last_user:
+            for c in last_user.get("content", []):
+                if c.get("type") == "image":
+                    latest_image_path = c.get("path")
+                    break
+        return {
+            "latest_image_path": latest_image_path or self.image_path,
+            "conversations": self.conversations,
+        }
 
-        return all the images and conversations in this step
-        """
+    # ----------- helpers -----------
+    def _init_conversations(self):
+        """Initialize conversations with system and first user message."""
+        self.conversations = []
+        # system
+        self.conversations.append({
+            "role": "system",
+            "content": [{"type": "text", "text": self.system_prompt()}]
+        })
+        # first user message: original image + first prompt
+        contents = []
+        if self.image_path:
+            contents.append({"type": "image", "path": self.image_path})
+        contents.append({"type": "text", "text": self.format_prompt()})
+        self._append_user_message(contents=contents)
 
-        if init_obs:
-            img = self.image_path
-        
-        format_prompt_text = 
+    def _append_user_message(self, contents: List[Dict[str, Any]]):
+        self.conversations.append({"role": "user", "content": contents})
 
-        
+    def _append_assistant_message(self, text: str):
+        self.conversations.append({
+            "role": "assistant",
+            "content": [{"type": "text", "text": text}]
+        })
+
+    def _build_observation_from_last_user(self) -> Dict[str, Any]:
+        """Compose obs_str and multi_modal_data from the latest user message."""
+        if not self.conversations:
+            return {"obs_str": "", "multi_modal_data": {"<image>": []}}
+        last_user = None
+        for msg in reversed(self.conversations):
+            if msg.get("role") == "user":
+                last_user = msg
+                break
+        images: List[Image.Image] = []
+        text_parts: List[str] = []
+        img_placeholders = []
+        if last_user:
+            for c in last_user.get("content", []):
+                if c.get("type") == "image" and c.get("path"):
+                    try:
+                        images.append(self.get_image(c["path"]))
+                        img_placeholders.append("<image>")
+                    except Exception:
+                        pass
+                elif c.get("type") == "text" and c.get("text"):
+                    text_parts.append(c["text"])
+
+        obs_str = (" ".join(img_placeholders) + "\n" + "\n".join(text_parts)).strip()
+        return {
+            "obs_str": obs_str,
+            "multi_modal_data": {"<image>": images},
+        }
+
+

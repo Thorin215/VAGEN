@@ -41,35 +41,14 @@ Output discipline:
 - Use <tool> only when you need more evidence; otherwise provide a final <answer>.
 """
 
-    # Optionally append an example if defined
-    cfg = FORMAT_CONFIGS.get(format_type)
-    example = (cfg or {}).get("example")
-    if example:
-        return base_prompt + "\nExample:\n" + example
+    # # Add example based on format type
+    # if format_type in FORMAT_CONFIGS:
+    #     example = FORMAT_CONFIGS[format_type].get("example", "")
+    #     if example:
+    #         return base_prompt + '\n' + "Example:\n" + example
+    
     return base_prompt
 
-def init_observation_template(**kwargs):
-    observation = kwargs.get("observation", None)
-    return f"""[Initial Observation]:
-{observation}
-Please carefully observe the image, and generate SVG code that reproduces it as accurately as possible.
-Decide on your SVG code.
-"""
-
-def action_template(**kwargs):
-    valid_action = kwargs.get("valid_action", None)
-    observation = kwargs.get("observation", None)
-    reward = kwargs.get("reward", None)
-    done = kwargs.get("done", None)
-    
-    return f"""After your answer, the extracted valid SVG code is {valid_action}.
-After that, the observation is:
-{observation}
-reward: {reward}
-done: {done}
-Please revise your code to make it more precise and similar to the original image.
-Decide on your revised SVG code.
-"""
 
 # Format configurations defining the structure of each format
 FORMAT_CONFIGS = {
@@ -154,41 +133,19 @@ def format_prompt_generator(format_type):
     def prompt_function(**kwargs):
         """
         Generate a prompt for the specified format.
-        
-        Args:
-            max_actions_per_step (int): Maximum number of actions allowed per step
-            action_sep (str): Separator between actions
-            add_example (bool): Whether to add an example
             
         Returns:
             str: The formatted prompt
         """
-        max_actions_per_step = kwargs.get("max_actions_per_step", 1)
-        action_sep = kwargs.get("action_sep", ",")
-        add_example = kwargs.get("add_example", True)
 
         # Use first_prompt as default if format_type not found
         config = FORMAT_CONFIGS.get(format_type, FORMAT_CONFIGS["first_prompt"])
 
-        # Build the base prompt text
-        base_prompt = f"""You can take up to {max_actions_per_step} action(s) at a time, separated by {action_sep}.
-{config["description"]}"""
+        base_prompt = f"{config['description']}"
 
-        # Add additional information if available
-        if "additional_info" in config:
-            base_prompt += f"\n{config['additional_info']}"
-
-        # Add response format instruction
         base_prompt += f"""
 Your response should be in the format of:
 {config["format"]}"""
-
-        # Add example if requested
-        if add_example:
-            example = config.get("example")
-            if example:
-                return base_prompt + '\n' + f"e.g. {example}"
-            return base_prompt
 
         return base_prompt
     
@@ -199,17 +156,14 @@ format_prompt = {format_type: format_prompt_generator(format_type)
                 for format_type in FORMAT_CONFIGS}
 
 # Convenience prompt strings for agents that expect flat prompt texts
-first_prompt = format_prompt["first_prompt"](max_actions_per_step=1, action_sep=",", add_example=False)
-continue_prompt = format_prompt["continue_prompt"](max_actions_per_step=1, action_sep=",", add_example=False)
-final_prompt = format_prompt["final_prompt"](max_actions_per_step=1, action_sep=",", add_example=False)
+first_prompt = format_prompt["first_prompt"]()
+continue_prompt = format_prompt["continue_prompt"]()
+final_prompt = format_prompt["final_prompt"]()
 
 if __name__ == "__main__":
-    # Example usage
-    max_actions_per_step = 1
-    action_sep = ","
-    
+
     for key, func in format_prompt.items():
         if key != "default":  # Skip printing default as it's the same as free_think
             print(f"{key} format prompt:")
-            print(func(max_actions_per_step=max_actions_per_step, action_sep=action_sep, add_example=True))
+            print(func())
             print("\n" + "="*50 + "\n")
