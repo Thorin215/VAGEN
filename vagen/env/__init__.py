@@ -73,3 +73,13 @@ try:
 except ImportError:
     pass
 
+try:
+    from .detectagent import DetectAgentEnv, DetectAgentEnvConfig, DetectAgentService, DetectAgentServiceConfig
+    REGISTERED_ENV["detectagent"] = {
+        "env_cls": DetectAgentEnv,
+        "config_cls": DetectAgentEnvConfig,
+        "service_cls": DetectAgentService,
+        "service_config_cls": DetectAgentServiceConfig
+    }
+except ImportError:
+    pass

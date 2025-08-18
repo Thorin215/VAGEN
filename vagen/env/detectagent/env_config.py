@@ -3,9 +3,9 @@ from dataclasses import dataclass, fields, field
 from typing import Optional, List, Union, Dict, Any
 
 @dataclass
-class SvgEnvConfig(BaseEnvConfig):
-    """Configuration for the SVG environment"""
-    dataset_name: str = "starvector/svg-icons-simple"
+class DetectAgentEnvConfig(BaseEnvConfig):
+    """Configuration for the Detect Agent environment"""
+    dataset_name: str = ""
     data_dir: str = "data"
     seed: int = 42
     split: str = "train"
@@ -48,7 +48,7 @@ class SvgEnvConfig(BaseEnvConfig):
         ]
         
         id_str = ",".join([f"{field.name}={getattr(self, field.name)}" 
-                          for field in fields(self) 
+                          for field in fields(self)
                           if field.name in id_fields])
         
         # Add optional fields if they're set
@@ -57,9 +57,9 @@ class SvgEnvConfig(BaseEnvConfig):
             value = getattr(self, field_name)
             if value is not None:
                 id_str += f",{field_name}={value}"
-                
-        return f"SvgEnvConfig({id_str})"
-    
+
+        return f"DetectAgentEnvConfig({id_str})"
+
     def get_score_config(self) -> Dict:
         """Get the score configuration dictionary"""
         score_config = {

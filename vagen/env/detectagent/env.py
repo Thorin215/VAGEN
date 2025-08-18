@@ -105,10 +105,12 @@ class DetectAgentEnv(BaseEnv):
         img_to_show = result_path if result_path else self.image_path
         if img_to_show:
             user_contents.append({"type": "image", "path": img_to_show})
-        user_contents.append({"type": "text", "text": next_prompt_text})
+        
         # 如果有工具消息，把工具反馈文字也加进来（便于模型参考）
         if tool_result and tool_result.get("message"):
-            user_contents.append({"type": "text", "text": f"[tool:{tool_name}] {tool_result['message']}"})
+            user_contents.append({"type": "text", "text": f"[tool:{tool_name}] {tool_result['message']}, {next_prompt_text}"})
+        else:
+            user_contents.append({"type": "text", "text": next_prompt_text})
         self._append_user_message(contents=user_contents)
 
         # 简单奖励：格式正确给微小奖励
@@ -177,21 +179,54 @@ class DetectAgentEnv(BaseEnv):
         pass
 
     def _render(self, init_obs: bool = False) -> Dict[str, Any]:
-        """Return a lightweight view for UI: latest image and conversations."""
-        last_user = None
-        for msg in reversed(self.conversations):
+        """Return all images referenced in the conversation and the full conversation log.
+
+        Returns:
+            {
+                "image_paths": [str, ...],  # distinct, in chronological order
+                "conversations": [...],     # full self.conversations structure
+            }
+        """
+        # [
+        #     {"type": "image", "path": c["path"]}
+        #     
+        # ]
+        obs_str= ""
+
+        image_paths: List[str] = []
+        for msg in self.conversations:
             if msg.get("role") == "user":
-                last_user = msg
-                break
-        latest_image_path = None
-        if last_user:
-            for c in last_user.get("content", []):
-                if c.get("type") == "image":
-                    latest_image_path = c.get("path")
-                    break
+                c = msg.get("content", [])
+                if c.get("type") == "image" and c.get("path"):
+                    image_paths.append(c["path"])
+                content = c.get("text", "")
+                obs_str += "User:" + "<image>" + content
+            else:
+                c = msg.get("content", [])
+                # if c.get("type") == "image" and c.get("path"):
+                    # image_paths.append(c["path"])
+                content = c.get("text", "")
+                obs_str += "Assistant:" + content
+
+
+        # # de-duplicate while preserving order
+        # seen = set()
+        # deduped_paths: List[str] = []
+        # for p in image_paths:
+        #     if p not in seen:
+        #         seen.add(p)
+        #         deduped_paths.append(p)
+
+        # return {
+        #     "image_paths": deduped_paths,
+        #     "conversations": self.conversations,
+        # }
+        imgs = [Image.open(p).convert("RGB") for p in image_paths if os.path.exists(p)]
         return {
-            "latest_image_path": latest_image_path or self.image_path,
-            "conversations": self.conversations,
+            "obs_str": obs_str,
+            "multi_model_data": {
+                "<image>": imgs
+            }
         }
 
     # ----------- helpers -----------
