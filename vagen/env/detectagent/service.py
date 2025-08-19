@@ -1,4 +1,4 @@
-from vagen.env.base import BaseService
+from vagen.env.base.base_service import BaseService
 from .env import DetectAgentEnv
 from .env_config import DetectAgentEnvConfig
 

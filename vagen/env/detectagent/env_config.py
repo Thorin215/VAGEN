@@ -10,6 +10,10 @@ class DetectAgentEnvConfig(BaseEnvConfig):
     seed: int = 42
     split: str = "train"
     action_sep: str = "~~"
+    # Input image path (optional, used by DetectAgentEnv)
+    image_path: str = ""
+    # Optional max steps for the env loop
+    max_steps: int = 10
     # Score configuration
     model_size: str = "small"  # 'small', 'base', or 'large'
     # Weights for different scoring components

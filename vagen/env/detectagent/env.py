@@ -78,6 +78,9 @@ class DetectAgentEnv(BaseEnv):
         if rst.get("answer_content") and rst["answer_content"].strip().lower() in {"no", "yes"}:
             done = True
 
+        if self.prompt_format == "final_prompt":
+            done = True
+
         # 记录 assistant 的原始响应
         self._append_assistant_message(text=rst.get("llm_raw_response", action_str))
         
