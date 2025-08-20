@@ -68,7 +68,7 @@ class DetectAgentEnv(BaseEnv):
 
         obs = self._build_observation_from_last_user()
         info = {
-            "metrics": {},
+            "metrics": {"turn_metrics": {}, "traj_metrics": {}},
             "llm_raw_response": "",
             "llm_response": "",
             "conversations": self.conversations,
@@ -79,8 +79,13 @@ class DetectAgentEnv(BaseEnv):
     def step(self, action_str: str, dino_model=None, dreamsim_model=None) -> Tuple[Dict, float, bool, Dict]:
         """Execute one step within the environment."""
         self.current_step += 1
-        # 解析 LLM 输出
-        rst = self.parse_func(action_str)
+        # 解析 LLM 输出，容错避免抛异常导致上层拿到空观测
+        try:
+            rst = self.parse_func(action_str) or {}
+            if not isinstance(rst, dict):
+                rst = {}
+        except Exception:
+            rst = {}
 
         # 默认未结束
         answer_content = (rst.get("answer_content") or "").strip().lower()
@@ -95,23 +100,26 @@ class DetectAgentEnv(BaseEnv):
         result_path = None
         tool_name = (rst.get("tool_content") or "").strip()
 
-        if tool_name and not done:
-            if self.tool_caller:
+        if tool_name and not done and self.tool_caller:
+            try:
                 # 调用工具
                 tool_result = self.tool_caller.call_tool(tool_name, {"image_path": self.image_path})
                 result_path = self.extract_result_path(tool_result)
-            else:
-                # 工具不可用时，忽略工具调用
-                tool_result = {"status": "error", "message": "tool unavailable", "data": None}
+            except Exception:
+                tool_result = {"status": "error", "message": "tool failed", "data": None}
                 result_path = None
 
-        region_content = rst["region_content"]
+        region_content = (rst.get("region_content") or "").strip()
         gt_bbox = self.get_gt_bbox()
         print("gt_bbox:", gt_bbox)
-        if region_content:
-            pred_bbox = list(map(int, region_content.split(",")))
-            iou = self.compute_iou(gt_bbox, pred_bbox) if gt_bbox else 0.0
-            print(f"IOU between GT and Pred bbox for step {self.current_step}: {iou}")
+        if region_content and gt_bbox:
+            try:
+                pred_bbox = list(map(int, region_content.split(",")))
+                # Use the correct IOU helper defined below
+                iou = self.iou(gt_bbox, pred_bbox)
+                print(f"IOU between GT and Pred bbox for step {self.current_step}: {iou}")
+            except Exception:
+                pass
 
         # 根据状态决定下一个用户提示类型
         if done or self.current_step >= self.max_steps:
@@ -145,7 +153,10 @@ class DetectAgentEnv(BaseEnv):
         obs = self._build_observation_from_last_user()
         info = {
             "metrics": {
-                "format_correct": bool(rst.get("format_correct")),
+                "turn_metrics": {
+                    "format_correct": 1.0 if rst.get("format_correct") else 0.0,
+                },
+                "traj_metrics": {},
             },
             "llm_raw_response": rst.get("llm_raw_response", action_str),
             "llm_response": rst.get("llm_response", action_str),
@@ -204,6 +215,7 @@ class DetectAgentEnv(BaseEnv):
         Returns:
             Loaded image object
         """
+        print(image_path)
         if not image_path or not os.path.exists(image_path):
             raise FileNotFoundError(f"Image file not found: {image_path}")
         try:

@@ -249,6 +249,8 @@ class BatchEnvServer:
             raise ValueError(f"Environment {env_id} not found")
             
         env_name = self.env_to_service[env_id]
+        print("env_name:", env_name)
+        print()
         service = self.services[env_name]
         return service, env_name
     
@@ -267,8 +269,7 @@ class BatchEnvServer:
                 raise ValueError(f"Config for environment {env_id} is missing 'env_name'")
                 
             # Get or create the appropriate service
-            if env_name not in self.services:
-                self.services[env_name] = self._get_service_for_env_name(env_name)
+            self._get_service_for_env_name(env_name)
                 
             # Track which service manages this environment
             self.env_to_service[env_id] = env_name
@@ -283,7 +284,8 @@ class BatchEnvServer:
         
         # Call create_environments_batch method on each service
         for env_name, configs in service_to_configs.items():
-            service = self.services[env_name]
+            print("env_name:", env_name)
+            service = self._get_service_for_env_name(env_name)
             service.create_environments_batch(configs)
     
     

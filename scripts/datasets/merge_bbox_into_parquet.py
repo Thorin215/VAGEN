@@ -75,9 +75,13 @@ def _match_record(image_path: str, exact_map: Dict[str, dict], base_map: Dict[st
 def _inject_bbox(example: dict, match: dict, store_gt_path: bool) -> dict:
     extra = example.get("extra_info") or {}
     # write gt_bbox
-    extra["gt_bbox"] = list(map(int, match["bbox"]))
+    # extra["gt_bbox"] = list(map(int, match["bbox"]))
+    # if store_gt_path:
+    #     extra["gt_path"] = match.get("gt_path", "")
+    cfg = extra["env_config"]
+    cfg["gt_bbox"] = list(map(int, match["bbox"]))
     if store_gt_path:
-        extra["gt_path"] = match.get("gt_path", "")
+        cfg["gt_path"] = match.get("gt_path", "")
     example["extra_info"] = extra
     return example
 

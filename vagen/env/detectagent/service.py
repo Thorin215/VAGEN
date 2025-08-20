@@ -17,6 +17,16 @@ class DetectAgentService(BaseService):
         self.config = config
         self.max_workers = getattr(config, "max_workers", 10)
 
+    def _fallback_observation(self, env: Optional[DetectAgentEnv] = None) -> Dict[str, Any]:
+        """Build a safe fallback observation to guarantee obs_str exists."""
+        placeholder = "<image>"
+        try:
+            if env is not None and hasattr(env, "config"):
+                placeholder = getattr(env.config, "image_placeholder", placeholder)
+        except Exception:
+            pass
+        return {"obs_str": "", "multi_modal_data": {placeholder: []}}
+
     def create_environments_batch(self, ids2configs: Dict[Any, Any]) -> None:
         """Create multiple environments; skip and log failures instead of raising."""
         def create_single_env(env_id: Any, cfg: Dict[str, Any]):
@@ -30,6 +40,7 @@ class DetectAgentService(BaseService):
                 return env_id, None, str(e)
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            print("fuck")
             futures = {executor.submit(create_single_env, env_id, cfg): env_id for env_id, cfg in ids2configs.items()}
             for future in as_completed(futures):
                 env_id = futures[future]
@@ -50,14 +61,16 @@ class DetectAgentService(BaseService):
         for env_id, seed in ids2seeds.items():
             env = self.environments.get(env_id)
             if env is None:
-                results[env_id] = ({}, {"error": f"Environment {env_id} not found"})
+                fallback_obs = self._fallback_observation()
+                results[env_id] = (serialize_observation(fallback_obs), {"error": f"Environment {env_id} not found"})
                 continue
             try:
                 observation, info = env.reset(seed=seed)
                 serialized_observation = serialize_observation(observation)
                 results[env_id] = (serialized_observation, info)
             except Exception as e:
-                results[env_id] = ({}, {"error": str(e)})
+                fallback_obs = self._fallback_observation(env)
+                results[env_id] = (serialize_observation(fallback_obs), {"error": str(e)})
         return results
 
     def step_batch(self, ids2actions: Dict[Any, Any]) -> Dict[Any, Tuple[Dict, float, bool, Dict]]:
@@ -65,14 +78,16 @@ class DetectAgentService(BaseService):
         for env_id, action in ids2actions.items():
             env = self.environments.get(env_id)
             if env is None:
-                results[env_id] = ({}, 0.0, True, {"error": f"Environment {env_id} not found"})
+                fallback_obs = self._fallback_observation()
+                results[env_id] = (serialize_observation(fallback_obs), 0.0, True, {"error": f"Environment {env_id} not found"})
                 continue
             try:
                 observation, reward, done, info = env.step(action)
                 serialized_observation = serialize_observation(observation)
                 results[env_id] = (serialized_observation, reward, done, info)
             except Exception as e:
-                results[env_id] = ({}, 0.0, True, {"error": str(e)})
+                fallback_obs = self._fallback_observation(env)
+                results[env_id] = (serialize_observation(fallback_obs), 0.0, True, {"error": str(e)})
         return results
 
     def compute_reward_batch(self, env_ids: List[str]) -> Dict[Any, float]:

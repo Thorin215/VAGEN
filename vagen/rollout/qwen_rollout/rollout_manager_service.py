@@ -289,6 +289,11 @@ class QwenVLRolloutManagerService():
         assert info is not None, "info cannot be None"
         assert isinstance(reward, (int, float)), "reward must be a number"
         assert isinstance(done, bool), "done must be a boolean"
+        print(obs.keys())
+        if 'obs_str' not in obs:
+            obs['obs_str'] = ""
+            if 'multi_modal_data' not in obs or not isinstance(obs['multi_modal_data'], dict):
+                obs['multi_modal_data'] = {}
         record_entry = {
             'env_id': env_id,
             'done': done,
@@ -335,7 +340,6 @@ class QwenVLRolloutManagerService():
         chat = []
         
         env_id = history[0]['env_id']
-        chat.append({"role": "system", "content": self.system_prompts[env_id]})
 
         image_data=[]
         for i, record in enumerate(history):
@@ -621,8 +625,11 @@ class QwenVLRolloutManagerService():
                 obs, reward, done, info = rst
                 self.env_states[env_id]['step'] += 1
                 self.env_states[env_id]['done'] = done
-                self.env_states[env_id]['metrics']['traj_metrics'] = info['metrics'].get('traj_metrics', {})
-                for k,v in info['metrics']['turn_metrics'].items():
+                # Safely handle cases where info or metrics may be missing
+                metrics = info.get('metrics', {}) if isinstance(info, dict) else {}
+                self.env_states[env_id]['metrics']['traj_metrics'] = metrics.get('traj_metrics', {})
+                turn_metrics = metrics.get('turn_metrics', {})
+                for k, v in turn_metrics.items():
                     self.env_states[env_id]['metrics']['turn_metrics'][k].append(v)
                 
                 self.record(env_id, obs, reward, done, info)
