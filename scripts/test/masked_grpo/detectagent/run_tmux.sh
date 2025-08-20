@@ -78,9 +78,9 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     data.train_files=data/$EXPERIMENT_NAME/train.parquet \\
     data.val_files=data/$EXPERIMENT_NAME/test.parquet \\
     data.train_batch_size=16 \\
-    data.max_prompt_length=1024 \\
-    data.max_response_length=200 \\
-    data.max_trajectory_length=2400 \\
+    data.max_prompt_length=128000 \\
+    data.max_response_length=128000 \\
+    data.max_trajectory_length=128000 \\
     data.image_key=images \\
     data.truncation=left \\
     actor_rollout_ref.model.path=/opt/liblibai-models/user-workspace2/users/wc/model/Qwen2.5-VL-3B-Instruct \\
@@ -128,7 +128,7 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     rollout_manager.use_multi_turn_reward=False \\
     rollout_manager.use_loss_mask=True \\
     rollout_manager.use_gae_mask=True \\
-    trainer.val_before_train=True \\
+    trainer.val_before_train=False \\
     trainer.val_generations_to_log_to_wandb=8 \\
     rollout_manager.n_trajectory=8 \\
     rollout_manager.use_service=True \\
