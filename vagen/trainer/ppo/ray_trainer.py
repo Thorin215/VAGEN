@@ -1066,7 +1066,7 @@ class RayPPOTrainer(object):
 
         # perform validation before training
         # currently, we only support validation using the reward_function.
-        if self.val_reward_fn is not None and self.config.trainer.get('val_before_train', True):
+        if self.val_reward_fn is not None and self.config.trainer.get('val_before_train', False):
             val_metrics = self._validate()
             pprint(f'Initial validation metrics: {val_metrics}')
             logger.log(data=val_metrics, step=self.global_steps)
@@ -1128,6 +1128,13 @@ class RayPPOTrainer(object):
                         train_metrics=self.log_rst_to_metrics_dict(rst=rst,mode='train')
                         metrics.update(train_metrics)
                     print(f"[DEBUG] step {self.global_steps} rollout ends")
+                    batch = batch.union(final_gen_batch_output)
+
+                    if self.config.actor_rollout_ref.actor.shuffle:
+                        batch.shuffle()
+                        final_gen_batch_output.shuffle() # <--- 我添加了这一行
+
+                    # union the computed adv and ret back to the batch
                     batch = batch.union(final_gen_batch_output)
 
                     # balance the number of valid tokens on each dp rank.

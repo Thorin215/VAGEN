@@ -9,6 +9,7 @@ except Exception:
 
 import os
 from typing import Dict, Any, Optional, Tuple, List
+import numpy as np
 
 class DetectAgentEnv(BaseEnv):
     """
@@ -112,11 +113,13 @@ class DetectAgentEnv(BaseEnv):
         region_content = (rst.get("region_content") or "").strip()
         gt_bbox = self.get_gt_bbox()
         print("gt_bbox:", gt_bbox)
-        if region_content and gt_bbox:
+        print("region_content:", region_content)
+        if region_content:
             try:
                 pred_bbox = list(map(int, region_content.split(",")))
                 # Use the correct IOU helper defined below
                 iou = self.iou(gt_bbox, pred_bbox)
+                print(f"Predicted bbox: {pred_bbox}, GT bbox: {gt_bbox}, IoU :{iou}.")
                 print(f"IOU between GT and Pred bbox for step {self.current_step}: {iou}")
             except Exception:
                 pass
@@ -198,12 +201,13 @@ class DetectAgentEnv(BaseEnv):
         The bbox is expected to be [x1,y1,x2,y2] with integer values.
         """
         bbox = self.config.get("gt_bbox") if hasattr(self, "config") else None
-        if not bbox:
+
+        if bbox is None or len(bbox) != 4:
             return None
         try:
             return [int(b) for b in bbox]
         except Exception:
-            return None
+            return None 
 
     def get_image(self, image_path: str):
         """

@@ -78,9 +78,9 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     data.train_files=data/$EXPERIMENT_NAME/train.parquet \\
     data.val_files=data/$EXPERIMENT_NAME/test.parquet \\
     data.train_batch_size=16 \\
-    data.max_prompt_length=4096 \\
-    data.max_response_length=200 \\
-    data.max_trajectory_length=2400 \\
+    data.max_prompt_length=8192 \\
+    data.max_response_length=4096 \\
+    data.max_trajectory_length=128000 \\
     data.image_key=images \\
     data.truncation=left \\
     actor_rollout_ref.model.path=/opt/liblibai-models/user-workspace2/users/wc/model/Qwen2.5-VL-3B-Instruct \\
@@ -97,7 +97,7 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=1 \\
     actor_rollout_ref.rollout.tensor_model_parallel_size=2 \\
     actor_rollout_ref.rollout.name=vllm \\
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.1 \\
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.7 \\
     actor_rollout_ref.rollout.enable_chunked_prefill=False \\
     actor_rollout_ref.rollout.enforce_eager=False \\
     actor_rollout_ref.rollout.free_cache_engine=False \\
@@ -128,10 +128,10 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     rollout_manager.use_multi_turn_reward=False \\
     rollout_manager.use_loss_mask=True \\
     rollout_manager.use_gae_mask=True \\
-    trainer.val_before_train=True \\
+    trainer.val_before_train=False \\
     trainer.val_generations_to_log_to_wandb=8 \\
     rollout_manager.n_trajectory=8 \\
-    rollout_manager.use_service=True \\
+    rollout_manager.use_service=False \\
     rollout_manager.timeout=300 \\
     rollout_manager.base_url=\"http://localhost:$PORT\" \\
     2>&1 | tee $EXPERIMENT_NAME.log" C-m
