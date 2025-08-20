@@ -141,10 +141,20 @@ class BatchEnvServer:
             data = request.json
             if not data or 'env_ids' not in data:
                 return jsonify({"error": "Missing required parameter: env_ids"}), 400
-                
+
             env_ids = data['env_ids']
-            self._close_batch(env_ids)
-            return jsonify({"status": "success"}), 200
+            try:
+                closed, skipped, errors = self._close_batch(env_ids)
+                return jsonify({
+                    "status": "success",
+                    "closed": closed,
+                    "skipped": skipped,
+                    "errors": errors
+                }), 200
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                return jsonify({"status": "failed", "error": str(e)}), 500
         
         @self.app.route('/reset/<env_id>', methods=['POST'])
         def reset_environment(env_id):
@@ -381,26 +391,44 @@ class BatchEnvServer:
         
         return results
     
-    def _close_batch(self, env_ids: List[str]) -> None:
+    def _close_batch(self, env_ids: List[str]) -> Tuple[List[str], List[str], Dict[str, str]]:
         """
         Close multiple environments.
         
         Args:
             env_ids: List of environment IDs
         """
+        closed: List[str] = []
+        skipped: List[str] = []
+        errors: Dict[str, str] = {}
+
         # Group environment IDs by service
-        service_groups = {}
+        service_groups: Dict[str, Tuple[BaseService, List[str]]] = {}
         for env_id in env_ids:
-            service, env_name = self._get_service_for_env(env_id)
+            try:
+                service, env_name = self._get_service_for_env(env_id)
+            except Exception as e:
+                # Unknown env id — skip and record
+                skipped.append(env_id)
+                errors[env_id] = str(e)
+                continue
             if env_name not in service_groups:
                 service_groups[env_name] = (service, [])
             service_groups[env_name][1].append(env_id)
-            # Remove from tracking
-            del self.env_to_service[env_id]
+            # Remove from tracking safely
+            self.env_to_service.pop(env_id, None)
 
         # Close environments through respective services
         for env_name, (service, group_env_ids) in service_groups.items():
-            service.close_batch(group_env_ids)
+            try:
+                service.close_batch(group_env_ids)
+                closed.extend(group_env_ids)
+            except Exception as e:
+                for env_id in group_env_ids:
+                    skipped.append(env_id)
+                    errors[env_id] = str(e)
+
+        return closed, skipped, errors
     
     def _generate_env_id(self) -> str:
         """

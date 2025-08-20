@@ -234,14 +234,23 @@ def benchmark_service(config_path):
                 if 'close_batch' in functions:
                     print("    Closing environments...", end='', flush=True)
                     start_time = time.time()
-                    client.close_batch(env_ids)
-                    end_time = time.time()
-                    close_time = end_time - start_time
-                    batch_timings['close_batch'].append(close_time)
-                    print(f" {close_time:.4f}s ({close_time/batch_size:.6f}s per env)")
+                    try:
+                        client.close_batch(env_ids)
+                        end_time = time.time()
+                        close_time = end_time - start_time
+                        batch_timings['close_batch'].append(close_time)
+                        print(f" {close_time:.4f}s ({close_time/batch_size:.6f}s per env)")
+                    except Exception as e:
+                        end_time = time.time()
+                        print(f" failed with: {e}")
+                        # Still record timing so the loop can proceed
+                        batch_timings['close_batch'].append(end_time - start_time)
                 else:
                     # Make sure environments are closed even if not benchmarking close
-                    client.close_batch(env_ids)
+                    try:
+                        client.close_batch(env_ids)
+                    except Exception as e:
+                        print(f"    Close skipped due to error: {e}")
             
             # Compute average timings for this batch size
             env_results['batch_sizes'].append(batch_size)

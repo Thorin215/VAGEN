@@ -20,6 +20,8 @@ class DetectAgentEnvConfig(BaseEnvConfig):
     image_path: str = ""
     # Optional max steps for the env loop
     max_steps: int = 10
+    # Optional ground-truth bbox [x1,y1,x2,y2] for evaluation/supervision
+    gt_bbox: Optional[List[int]] = None
     # Device configuration
     # device: Dict[str, Any] = field(default_factory=lambda: {"dino": 0, "dreamsim": 0})
 

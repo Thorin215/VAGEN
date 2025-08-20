@@ -29,9 +29,13 @@ class DetectAgentEnv(BaseEnv):
         self.current_step = 0
 
         # formatter function for current prompt
-        self.format_prompt_func = FORMAT_PROMPT_MAP[self.prompt_format]
+        self.format_prompt_func = FORMAT_PROMPT_MAP.get(self.prompt_format, FORMAT_PROMPT_MAP.get("first_prompt"))
 
-        self.parse_func = PARSE_FUNC_MAP[self.prompt_format]
+        # Be robust to map differences across versions by providing a fallback
+        self.parse_func = PARSE_FUNC_MAP.get(
+            self.prompt_format,
+            PARSE_FUNC_MAP.get("no_think", PARSE_FUNC_MAP.get("free_think"))
+        )
         self.tool_caller = ToolCaller()
         self.image_path: str = self.config.get("image_path", "")
 
@@ -70,7 +74,8 @@ class DetectAgentEnv(BaseEnv):
     def step(self, action_str: str, dino_model=None, dreamsim_model=None) -> Tuple[Dict, float, bool, Dict]:
         """Execute one step within the environment."""
         self.current_step += 1
-
+        gt_bbox = self.get_gt_bbox()
+        print("fuck your mather bitch!")
         # 解析 LLM 输出
         rst = self.parse_func(action_str)
 
@@ -105,6 +110,7 @@ class DetectAgentEnv(BaseEnv):
         # 追加下一条用户消息（可能包含工具结果图 + 新提示）
         next_prompt_text = self.format_prompt()
         user_contents: List[Dict[str, Any]] = []
+
         # 工具结果优先展示，如果没有则仍展示原图
         img_to_show = result_path if result_path else self.image_path
         if img_to_show:
@@ -116,6 +122,16 @@ class DetectAgentEnv(BaseEnv):
         else:
             user_contents.append({"type": "text", "text": next_prompt_text})
         self._append_user_message(contents=user_contents)
+
+        if rst["answer_content"] == "yes":
+            self.total_reward += 5.0
+            print("Agent confirmed the image is manipulated.")
+        elif rst["answer_content"] == "no":
+            print("Agent confirmed the image is not manipulated.")
+
+        pred_bbox = list(map(int, rst["region_content"].strip().split(",")))
+
+        step_reward += self.iou(pred_bbox, gt_bbox) if self.iou(pred_bbox, gt_bbox) < 0.3 else 1
 
         # 简单奖励：格式正确给微小奖励
         step_reward = 1.0 if rst.get("format_correct") else 0.0
@@ -159,7 +175,20 @@ class DetectAgentEnv(BaseEnv):
         Returns:
             str: The formatted prompt string
         """
-        return self.format_prompt_func(**kwargs)
+        self.format_prompt_func = FORMAT_PROMPT_MAP[self.prompt_format]
+        return self.format_prompt_func()
+
+    def get_gt_bbox(self) -> Optional[List[int]]:
+        """Return ground-truth bbox from config if provided, else None.
+        The bbox is expected to be [x1,y1,x2,y2] with integer values.
+        """
+        bbox = self.config.get("gt_bbox") if hasattr(self, "config") else None
+        if not bbox:
+            return None
+        try:
+            return [int(b) for b in bbox]
+        except Exception:
+            return None
 
     def get_image(self, image_path: str) -> Image.Image:
         """
@@ -287,4 +316,13 @@ class DetectAgentEnv(BaseEnv):
             "multi_modal_data": {"<image>": images},
         }
 
-
+    def iou(bbox1, bbox2) -> float:
+        x1 = max(bbox1[0], bbox2[0])
+        y1 = max(bbox1[1], bbox2[1])
+        x2 = min(bbox1[2], bbox2[2])
+        y2 = min(bbox1[3], bbox2[3])
+        inter_area = max(0, x2 - x1) * max(0, y2 - y1)
+        bbox1_area = (bbox1[2] - bbox1[0]) * (bbox1[3] - bbox1[1])
+        bbox2_area = (bbox2[2] - bbox2[0]) * (bbox2[3] - bbox2[1])
+        union_area = bbox1_area + bbox2_area - inter_area
+        return inter_area / union_area if union_area > 0 else 0

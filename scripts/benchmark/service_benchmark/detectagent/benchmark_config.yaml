@@ -1,12 +1,17 @@
+server:
+  base_url: http://localhost:5000
+  timeout: 600
+  max_workers: 48
 # Benchmark parameters
 benchmark:
-  # Functions to benchmark
+  # Service functions to benchmark
   functions: 
-    - system_prompt
-    - reset
-    - step
-    - compute_reward
-    - close
+    - create_environments_batch
+    - reset_batch
+    - step_batch
+    - compute_reward_batch
+    - get_system_prompts_batch
+    - close_batch
   
   # Number of iterations for statistical significance
   iterations: 3
