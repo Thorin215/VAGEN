@@ -20,10 +20,7 @@ benchmark:
   step_count: 5
   
   # Batch sizes to test
-  batch_sizes: [8, 128]
-  
-  # Maximum number of parallel workers
-  max_workers: 8
+  batch_sizes: [1]
   
   # Directory to save benchmark results
   output_dir: "env_benchmark_results"

@@ -72,6 +72,14 @@ def benchmark_service(config_path):
     datasets_config = config.get('datasets', [])
     all_env_configs = {}
     
+    # Map dataset-specific aliases to registered env names
+    ENV_NAME_ALIASES = {
+        "detectagent-vision": "detectagent",
+    }
+
+    def normalize_env_name(name: str) -> str:
+        return ENV_NAME_ALIASES.get(name, name)
+
     for dataset_config in datasets_config:
         name = dataset_config.get('name')
         train_path = dataset_config.get('train_path')
@@ -87,8 +95,10 @@ def benchmark_service(config_path):
                 # Extract environment configs
                 for i in range(len(train_dataset)):
                     example = train_dataset[i]
+                    raw_name = example['extra_info'].get('env_name', '')
+                    fixed_name = normalize_env_name(raw_name)
                     env_config = {
-                        'env_name': example['extra_info']['env_name'],
+                        'env_name': fixed_name,
                         'env_config': example['extra_info']['env_config'],
                         'seed': example['extra_info']['seed']
                     }
@@ -105,8 +115,10 @@ def benchmark_service(config_path):
                 # Extract environment configs
                 for i in range(len(test_dataset)):
                     example = test_dataset[i]
+                    raw_name = example['extra_info'].get('env_name', '')
+                    fixed_name = normalize_env_name(raw_name)
                     env_config = {
-                        'env_name': example['extra_info']['env_name'],
+                        'env_name': fixed_name,
                         'env_config': example['extra_info']['env_config'],
                         'seed': example['extra_info']['seed']
                     }

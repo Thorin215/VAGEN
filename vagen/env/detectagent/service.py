@@ -22,6 +22,7 @@ class DetectAgentService(BaseService):
         def create_single_env(env_id: Any, cfg: Dict[str, Any]):
             try:
                 env_config_dict = cfg.get('env_config', {})
+                print("env_config_dict:", env_config_dict)
                 env_config = DetectAgentEnvConfig(**env_config_dict)
                 env = DetectAgentEnv(env_config)
                 return env_id, (env, env_config), None

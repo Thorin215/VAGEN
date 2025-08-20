@@ -120,7 +120,10 @@ class BatchEnvClient:
         Args:
             ids2configs: Dictionary mapping environment IDs to their configurations
         """
+
+        print("ids2configs:", ids2configs)
         response = self._make_request("environments", "POST", {"ids2configs": ids2configs})
+    
         if response.get("success") != True:
             raise Exception(f"Failed to create environments: {response.get('error', 'Unknown error')}")
         
