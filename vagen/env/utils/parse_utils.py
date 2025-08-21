@@ -306,11 +306,11 @@ def first_prompt(response: str) -> Dict:
         think_content, region_content, answer_content, tool_content, actions = "", "", "", "", []
         llm_response = ""
     else:
-        think_content = match.group(1)
-        region_content = match.group(2)
-        answer_content = match.group(3)
-        tool_content = match.group(4)
-        
+        think_content = re.search(r'<think>(.*?)</think>', response, re.DOTALL).group(1)
+        region_content = re.search(r'<region>bbox_2d\s*:\s*{\[([^\]]+)\]}.*?</region>', response).group(1)
+        answer_content = re.search(r'<answer>(.*?)</answer>', response, re.DOTALL).group(1)
+        tool_content = re.search(r'<tool>(.*?)</tool>', response, re.DOTALL).group(1)
+
         # if special_token_list is not None:
         #     for special_token in special_token_list:
         #         think_content = think_content.replace(special_token, "").strip()

@@ -116,7 +116,7 @@ class DetectAgentEnv(BaseEnv):
         print("region_content:", region_content)
         if region_content:
             try:
-                pred_bbox = list(map(int, region_content.split(",")))
+                pred_bbox = list(map(int, region_content.replace(" ", "").split(",")))
                 # Use the correct IOU helper defined below
                 iou = self.iou(gt_bbox, pred_bbox)
                 print(f"Predicted bbox: {pred_bbox}, GT bbox: {gt_bbox}, IoU :{iou}.")

@@ -599,6 +599,8 @@ class RayPPOTrainer(object):
                                          filter_prompts=True,
                                          return_raw_chat=self.config.data.get('return_raw_chat', False),
                                          truncation='error')
+        if len(self.train_dataset) == 0:
+            raise ValueError("Training dataset is empty. Please check your data files and configuration.")
         # use sampler for better ckpt resume
         if self.config.data.shuffle:
             train_dataloader_generator = torch.Generator()
@@ -798,8 +800,9 @@ class RayPPOTrainer(object):
                     batch.non_tensor_batch['extra_info'][i]
                     for i in range(len(batch))
                 ]
+            uids = batch.non_tensor_batch['uid']
             
-            self.test_rollout_manager.reset(env_configs)
+            self.test_rollout_manager.reset(env_configs, uids)
             self.test_rollout_manager.rollout_loop()
             micro_validation_rst = self.test_rollout_manager.recording_to_log() # data source == inputs in our current setting, outputs=whole trjecotry
             validation_rst.extend(micro_validation_rst)
@@ -1029,8 +1032,13 @@ class RayPPOTrainer(object):
                 for j in range(start_idx, end_idx)
             ]
             
+            mini_batch_uids = [
+                batch.non_tensor_batch['uid'][j]
+                for j in range(start_idx, end_idx)
+            ]
+            
             # Reset and process this mini-batch
-            rollout_manager.reset(mini_batch_env_configs)
+            rollout_manager.reset(mini_batch_env_configs, mini_batch_uids)
             rollout_manager.rollout_loop()
             mini_batch_output = rollout_manager.generate_batch_for_update()
             mini_batch_rst = rollout_manager.recording_to_log()

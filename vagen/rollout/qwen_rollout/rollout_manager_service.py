@@ -183,7 +183,7 @@ class QwenVLRolloutManagerService():
         return new_input_ids, new_attention_mask, new_loss_mask, new_end_of_response_position_mask
     
     @torch.no_grad()
-    def reset(self, env_configs):
+    def reset(self, env_configs, uids):
         """
         Reset environments based on provided configurations, reusing environments when possible.
         - For env with same config and env_name, reuse the same environment (reset)
@@ -274,7 +274,15 @@ class QwenVLRolloutManagerService():
                 info=info
             )
         
-        self.env_states = {env_id: {'step': 0, 'done': False,'metrics':{"turn_metrics":defaultdict(list),"traj_metrics":{}}} for env_id in self.envs}
+        self.env_states = {
+            env_id: {
+                'step': 0, 
+                'done': False,
+                'metrics':{"turn_metrics":defaultdict(list),"traj_metrics":{}},
+                'uid': uids[env_id],
+                'extra_info': env_configs[env_id]
+            } for env_id in self.envs
+        }
         self.system_prompts=self.env_client.get_system_prompts_batch(list(self.envs.keys()))
         return initial_obs, initial_info
     
@@ -423,6 +431,7 @@ class QwenVLRolloutManagerService():
             self, 
             recording: List[Dict], 
             step: int, 
+            env_id: str,
             window_size: int = None,
         ):
         """
@@ -536,7 +545,8 @@ class QwenVLRolloutManagerService():
         index = row_dict.get("extra_info", {}).get("index", 0)
         row_dict["index"] = index
         row_dict["step_reward_sum"]= sum(rewards)
-        
+        row_dict['uid'] = self.env_states[env_id]['uid']
+        row_dict['extra_info'] = self.env_states[env_id]['extra_info']
         return row_dict
 
     @torch.no_grad()
@@ -648,6 +658,7 @@ class QwenVLRolloutManagerService():
             row_dict = self._generate_input_for_uptate(
                 recording=self.recorder[env_id],
                 step=self.env_states[env_id]['step'],
+                env_id=env_id,
                 window_size=None,
             )
             step_reward_sum= row_dict['step_reward_sum']
