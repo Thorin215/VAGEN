@@ -118,7 +118,10 @@ class DetectAgentEnv(BaseEnv):
             try:
                 pred_bbox = list(map(int, region_content.replace(" ", "").split(",")))
                 # Use the correct IOU helper defined below
+                print("Pred_bbox:", pred_bbox)
                 iou = self.iou(gt_bbox, pred_bbox)
+                iou = iou if iou < 0.4 else 1
+                step_reward += iou  
                 print(f"Predicted bbox: {pred_bbox}, GT bbox: {gt_bbox}, IoU :{iou}.")
                 print(f"IOU between GT and Pred bbox for step {self.current_step}: {iou}")
             except Exception:

@@ -1136,14 +1136,25 @@ class RayPPOTrainer(object):
                         train_metrics=self.log_rst_to_metrics_dict(rst=rst,mode='train')
                         metrics.update(train_metrics)
                     print(f"[DEBUG] step {self.global_steps} rollout ends")
-                    batch = batch.union(final_gen_batch_output)
+
+                    # To avoid both the AssertionError and the KeyError, we will manually merge the batches.
+                    # Step 1: Align the original batch with the output batch using UIDs.
+                    uids_in_output = final_gen_batch_output.non_tensor_batch['uid']
+                    uids_in_batch = batch.non_tensor_batch['uid']
+                    uid_to_index_map = {uid: i for i, uid in enumerate(uids_in_batch)}
+                    new_order = [uid_to_index_map[uid] for uid in uids_in_output]
+                    batch.reorder(torch.tensor(new_order))
+
+                    # Step 2: Manually merge the tensor data from the output batch into the original batch.
+                    for key, value in final_gen_batch_output.batch.items():
+                        batch.batch[key] = value
+                    
+                    # Step 3: Update the non-tensor data, preserving original fields like 'data_source'.
+                    for key, value in final_gen_batch_output.non_tensor_batch.items():
+                        batch.non_tensor_batch[key] = value
 
                     if self.config.actor_rollout_ref.actor.shuffle:
                         batch.shuffle()
-                        final_gen_batch_output.shuffle() # <--- 我添加了这一行
-
-                    # union the computed adv and ret back to the batch
-                    batch = batch.union(final_gen_batch_output)
 
                     # balance the number of valid tokens on each dp rank.
                     # Note that this breaks the order of data inside the batch.
