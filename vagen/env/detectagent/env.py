@@ -28,7 +28,7 @@ class DetectAgentEnv(BaseEnv):
         # prompt format lifecycle: first_prompt -> continue_prompt (loop) -> final_prompt
         self.prompt_format = "first_prompt"
 
-        self.max_steps = self.config.get("max_steps", 10)
+        self.max_steps = self.config.get("max_steps", 5)
         self.current_step = 0
 
         # formatter function for current prompt
@@ -67,7 +67,7 @@ class DetectAgentEnv(BaseEnv):
 
         self._init_conversations()
 
-        obs = self._build_observation_from_last_user()
+        obs = self._render(init_obs=True)
         info = {
             "metrics": {"turn_metrics": {}, "traj_metrics": {}},
             "llm_raw_response": "",
@@ -79,7 +79,11 @@ class DetectAgentEnv(BaseEnv):
 
     def step(self, action_str: str, dino_model=None, dreamsim_model=None) -> Tuple[Dict, float, bool, Dict]:
         """Execute one step within the environment."""
+        print("\033[91mCome into Step\033[0m")
+        print("max steps:", self.max_steps)
+        print("current step:", self.current_step)
         self.current_step += 1
+        step_reward = 0
         # 解析 LLM 输出，容错避免抛异常导致上层拿到空观测
         try:
             rst = self.parse_func(action_str) or {}
@@ -96,19 +100,28 @@ class DetectAgentEnv(BaseEnv):
 
         # 记录 assistant 的原始响应
         self._append_assistant_message(text=rst.get("llm_raw_response", action_str))
+            
+        print("action_str:", action_str)
+        print("llm_raw_response:", rst.get("llm_raw_response", ""))        
 
         tool_result = None
         result_path = None
         tool_name = (rst.get("tool_content") or "").strip()
-
+        print("\033[92mtool_name:\033[0m", tool_name)
         if tool_name and not done and self.tool_caller:
             try:
                 # 调用工具
                 tool_result = self.tool_caller.call_tool(tool_name, {"image_path": self.image_path})
+                print("\033[94mParams\033[0m")
+                print(self.image_path)
                 result_path = self.extract_result_path(tool_result)
             except Exception:
                 tool_result = {"status": "error", "message": "tool failed", "data": None}
                 result_path = None
+
+        if tool_result != None and tool_result["status"] == "success":
+            # 处理工具成功返回的结果
+            step_reward += 0.5
 
         region_content = (rst.get("region_content") or "").strip()
         gt_bbox = self.get_gt_bbox()
@@ -120,11 +133,18 @@ class DetectAgentEnv(BaseEnv):
                 # Use the correct IOU helper defined below
                 print("Pred_bbox:", pred_bbox)
                 iou = self.iou(gt_bbox, pred_bbox)
-                iou = iou if iou < 0.4 else 1
-                step_reward += iou  
+                # iou = iou if iou < 0.4 else 1
+                # step_reward += iou  
+                if iou < 0.4:
+                    step_reward += iou*2
+                else:
+                    step_reward += 2.0  # if iou >= 0.4, give full reward
+
+                print("\033[92m------------------------------------------------------\033[0m")
                 print(f"Predicted bbox: {pred_bbox}, GT bbox: {gt_bbox}, IoU :{iou}.")
-                print(f"IOU between GT and Pred bbox for step {self.current_step}: {iou}")
+                print(f"IOU between GT and Pred bbox for step {self.current_step}: {iou}.")
             except Exception:
+                print("\033[93mError in IoU.\033[0m")
                 pass
 
         # 根据状态决定下一个用户提示类型
@@ -140,10 +160,11 @@ class DetectAgentEnv(BaseEnv):
         user_contents: List[Dict[str, Any]] = []
 
         # 工具结果优先展示，如果没有则仍展示原图
-        img_to_show = result_path if result_path else self.image_path
+        img_to_show = result_path if result_path else None
         if img_to_show:
             user_contents.append({"type": "image", "path": img_to_show})
 
+        print("\033[91m tool_result: \033[0m", tool_result)
         # 如果有工具消息，把工具反馈文字也加进来（便于模型参考）
         if tool_result and tool_result.get("message"):
             user_contents.append({"type": "text", "text": f"[tool:{tool_name}] {tool_result['message']}, {next_prompt_text}"})
@@ -152,7 +173,8 @@ class DetectAgentEnv(BaseEnv):
         self._append_user_message(contents=user_contents)
 
         # 简单奖励：格式正确给微小奖励
-        step_reward = 1.0 if rst.get("format_correct") else 0.0
+        format_reward = 0.7 if rst.get("format_correct") else 0.0
+        step_reward += format_reward
         self.total_reward += step_reward
 
         # 生成新的观测
@@ -170,6 +192,8 @@ class DetectAgentEnv(BaseEnv):
             "conversations": self.conversations,
             "tool_result": tool_result,
         }
+        # print("\033[94mObservation:\033[0m", obs)
+        # print("\033[94m-------------------------------------------\033[0m")
         return obs, step_reward, done, info
 
     def extract_result_path(self, tool_result: Optional[Dict]) -> str:
@@ -273,6 +297,8 @@ class DetectAgentEnv(BaseEnv):
                     imgs.append(self.get_image(p))
                 except Exception:
                     pass
+        
+        print("\033[93m [Init]obs_str_parts:\033[0m", obs_str_parts)
         return {
             "obs_str": "\n".join(obs_str_parts),
             "multi_modal_data": {"<image>": imgs},
@@ -312,9 +338,23 @@ class DetectAgentEnv(BaseEnv):
             if msg.get("role") == "user":
                 last_user = msg
                 break
+        
+        for msg in reversed(self.conversations):
+            if msg.get("role") == "assistant":
+                last_assistant = msg
+
         images: List[Any] = []
         text_parts: List[str] = []
         img_placeholders: List[str] = []
+
+        if last_assistant:
+            contents = last_assistant.get("content", [])
+            if isinstance(contents, dict):
+                contents = [contents]
+            for c in contents:
+                if c.get("type") == "text" and c.get("text"):
+                    text_parts.append(f"Assistant: {c['text']}")
+
         if last_user:
             contents = last_user.get("content", [])
             if isinstance(contents, dict):
@@ -327,9 +367,14 @@ class DetectAgentEnv(BaseEnv):
                     except Exception:
                         pass
                 elif c.get("type") == "text" and c.get("text"):
-                    text_parts.append(c["text"])
+                    text_parts.append(f"User: {c['text']}")
 
         obs_str = (" ".join(img_placeholders) + "\n" + "\n".join(text_parts)).strip()
+
+        print("\033[91mObservation:\033[0m", obs_str)
+        print("\033[91m------------------------------\033[0m")
+        # print("\033[94mMulti-modal data:\033[0m", {"<image>": images})
+
         return {
             "obs_str": obs_str,
             "multi_modal_data": {"<image>": images},
@@ -337,6 +382,7 @@ class DetectAgentEnv(BaseEnv):
 
     @staticmethod
     def iou(bbox1, bbox2) -> float:
+        print(f"In func iou bbox1 {bbox1}, bbox2: {bbox2}")
         x1 = max(bbox1[0], bbox2[0])
         y1 = max(bbox1[1], bbox2[1])
         x2 = min(bbox1[2], bbox2[2])
@@ -345,6 +391,7 @@ class DetectAgentEnv(BaseEnv):
         bbox1_area = (bbox1[2] - bbox1[0]) * (bbox1[3] - bbox1[1])
         bbox2_area = (bbox2[2] - bbox2[0]) * (bbox2[3] - bbox2[1])
         union_area = bbox1_area + bbox2_area - inter_area
+        print("iou calculated done!")
         return inter_area / union_area if union_area > 0 else 0
 
     def compute_reward(self) -> float:

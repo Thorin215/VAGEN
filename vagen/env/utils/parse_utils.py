@@ -293,6 +293,7 @@ def first_prompt(response: str) -> Dict:
     """
 
     response = response.replace("<image>","")
+    print("response in func prompt:", response)
     # Pattern to check for content strictly in the expected format
     strict_pattern = r'^\s*<think>(.*?)</think>\s*<region>(.*?)</region>\s*<answer>(.*?)</answer>\s*<tool>(.*?)</tool>\s*$'
     strict_match = re.match(strict_pattern, response.strip(), re.DOTALL)
@@ -304,10 +305,11 @@ def first_prompt(response: str) -> Dict:
     
     if not match:
         think_content, region_content, answer_content, tool_content, actions = "", "", "", "", []
-        llm_response = ""
+        # llm_response = ""
     else:
         think_content = re.search(r'<think>(.*?)</think>', response, re.DOTALL).group(1)
         region_content = re.search(r'<region>bbox_2d\s*:\s*{\[([^\]]+)\]}.*?</region>', response).group(1)
+        # region_content = re.search(r'<region>bbox_2d\s*:\s*\[([^\]]+)\]</region>', response).group(1)
         answer_content = re.search(r'<answer>(.*?)</answer>', response, re.DOTALL).group(1)
         tool_content = re.search(r'<tool>(.*?)</tool>', response, re.DOTALL).group(1)
 

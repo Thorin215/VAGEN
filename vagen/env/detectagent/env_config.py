@@ -24,7 +24,7 @@ class DetectAgentEnvConfig(BaseEnvConfig):
     gt_bbox: Optional[List[int]] = None
     # Device configuration
     # device: Dict[str, Any] = field(default_factory=lambda: {"dino": 0, "dreamsim": 0})
-
+    max_steps = 5
     # Reward configuration
     format_reward: float = 0.5
     format_penalty: float = 0.0

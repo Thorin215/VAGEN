@@ -2,12 +2,13 @@
 set -e  # Exit immediately if a command exits with a non-zero status
 
 # Interactive input for port and CUDA devices
-read -p "Enter port number (default: 5000): " PORT_INPUT
-PORT=${PORT_INPUT:-5000}
+# read -p "Enter port number (default: 5000): " PORT_INPUT
+# PORT=${PORT_INPUT:-5000}
+PORT=5000
 
-read -p "Enter CUDA devices (default: 0,1,2,3): " CUDA_DEVICES
-CUDA_DEVICES=${CUDA_DEVICES:-0,1,2,3}
-
+# read -p "Enter CUDA devices (default: 0,1,2,3): " CUDA_DEVICES
+# CUDA_DEVICES=${CUDA_DEVICES:-0,1,2,3}
+CUDA_DEVICES=0,3,5,7
 # Get the directory of the script
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
@@ -97,7 +98,7 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=1 \\
     actor_rollout_ref.rollout.tensor_model_parallel_size=2 \\
     actor_rollout_ref.rollout.name=vllm \\
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \\
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.8 \\
     actor_rollout_ref.rollout.enable_chunked_prefill=False \\
     actor_rollout_ref.rollout.enforce_eager=False \\
     actor_rollout_ref.rollout.free_cache_engine=False \\
@@ -120,17 +121,17 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     trainer.experiment_name=$EXPERIMENT_NAME \\
     trainer.n_gpus_per_node=4 \\
     trainer.nnodes=1 \\
-    trainer.save_freq=150 \\
-    trainer.test_freq=20 \\
+    trainer.save_freq=15 \\
+    trainer.test_freq=3000 \\
     trainer.total_training_steps=300 \\
-    rollout_manager.max_turns=3 \\
+    rollout_manager.max_turns=5 \\
     rollout_manager.window_size=5 \\
     rollout_manager.use_multi_turn_reward=False \\
     rollout_manager.use_loss_mask=True \\
     rollout_manager.use_gae_mask=True \\
     trainer.val_before_train=False \\
     trainer.val_generations_to_log_to_wandb=8 \\
-    rollout_manager.n_trajectory=8 \\
+    rollout_manager.n_trajectory=4 \\
     rollout_manager.use_service=False \\
     rollout_manager.timeout=300 \\
     rollout_manager.base_url=\"http://localhost:$PORT\" \\
