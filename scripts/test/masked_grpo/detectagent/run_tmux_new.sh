@@ -8,7 +8,7 @@ PORT=5000
 
 # read -p "Enter CUDA devices (default: 0,1,2,3): " CUDA_DEVICES
 # CUDA_DEVICES=${CUDA_DEVICES:-0,1,2,3}
-CUDA_DEVICES=5,7
+CUDA_DEVICES=0,5
 # Get the directory of the script
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
