@@ -120,14 +120,14 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     algorithm.kl_ctrl.kl_coef=0.001 \\
     trainer.critic_warmup=0 \\
     trainer.logger=['console','wandb'] \\
-    trainer.project_name='vagen_7b_full_tool_step3' \\
+    trainer.project_name='vagen_7b_full_tool_step2' \\
     trainer.experiment_name=$EXPERIMENT_NAME \\
     trainer.n_gpus_per_node=4 \\
     trainer.nnodes=1 \\
     trainer.save_freq=15 \\
     trainer.test_freq=3000 \\
     trainer.total_training_steps=300 \\
-    rollout_manager.max_turns=3 \\
+    rollout_manager.max_turns=2 \\
     rollout_manager.window_size=5 \\
     rollout_manager.use_multi_turn_reward=False \\
     rollout_manager.use_loss_mask=True \\
