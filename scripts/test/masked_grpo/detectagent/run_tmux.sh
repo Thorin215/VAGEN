@@ -8,7 +8,7 @@ PORT=5000
 
 # read -p "Enter CUDA devices (default: 0,1,2,3): " CUDA_DEVICES
 # CUDA_DEVICES=${CUDA_DEVICES:-0,1,2,3}
-CUDA_DEVICES=1,2,4,7
+CUDA_DEVICES=3,5,6,7
 # Get the directory of the script
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
@@ -127,7 +127,7 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     trainer.save_freq=15 \\
     trainer.test_freq=3000 \\
     trainer.total_training_steps=300 \\
-    rollout_manager.max_turns=5 \\
+    rollout_manager.max_turns=3 \\
     rollout_manager.window_size=5 \\
     rollout_manager.use_multi_turn_reward=False \\
     rollout_manager.use_loss_mask=True \\
