@@ -72,22 +72,22 @@ tmux send-keys -t "$TRAIN_SESSION" "set -x" C-m
 # First create the dataset
 tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.env.create_dataset \\
     --yaml_path \"$SCRIPT_DIR/env_config.yaml\" \\
-    --train_path \"data/$EXPERIMENT_NAME/merged_new.parquet\" \\
+    --train_path \"data/$EXPERIMENT_NAME/train.parquet\" \\
     --test_path \"data/$EXPERIMENT_NAME/test.parquet\"" C-m
 
 # Then start the training
 tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     algorithm.adv_estimator=grpo \\
     algorithm.high_level_gamma=1.0 \\
-    data.train_files=data/$EXPERIMENT_NAME/merged_new.parquet \\
+    data.train_files=data/$EXPERIMENT_NAME/train.parquet \\
     data.val_files=data/$EXPERIMENT_NAME/test.parquet \\
-    data.train_batch_size=16 \\
+    data.train_batch_size=8 \\
     data.max_prompt_length=8192 \\
     data.max_response_length=4096 \\
     data.max_trajectory_length=128000 \\
     data.image_key=images \\
     data.truncation=left \\
-    actor_rollout_ref.model.path=/raid/users/wc/model/Qwen/Qwen2.5-VL-7B-Instruct \\
+    actor_rollout_ref.model.path=/raid/users/wc/model/Qwen/Qwen2.5-VL-32B-Instruct \\
     actor_rollout_ref.actor.optim.lr=1e-6 \\
     actor_rollout_ref.model.use_remove_padding=True \\
     actor_rollout_ref.actor.ppo_mini_batch_size=32 \\
@@ -101,7 +101,7 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=1 \\
     actor_rollout_ref.rollout.tensor_model_parallel_size=2 \\
     actor_rollout_ref.rollout.name=vllm \\
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.45 \\
+    actor_rollout_ref.rollout.gpu_memory_utilization=1.0 \\
     actor_rollout_ref.rollout.enable_chunked_prefill=False \\
     actor_rollout_ref.rollout.enforce_eager=False \\
     actor_rollout_ref.rollout.free_cache_engine=False \\
@@ -120,7 +120,7 @@ tmux send-keys -t "$TRAIN_SESSION" "python3 -m vagen.trainer.main_ppo \\
     algorithm.kl_ctrl.kl_coef=0.001 \\
     trainer.critic_warmup=0 \\
     trainer.logger=['console','wandb'] \\
-    trainer.project_name='vagen_7b_full_tool_step_data' \\
+    trainer.project_name='vagen_new_32b' \\
     trainer.experiment_name=$EXPERIMENT_NAME \\
     trainer.n_gpus_per_node=4 \\
     trainer.nnodes=1 \\

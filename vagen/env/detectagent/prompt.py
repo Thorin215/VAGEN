@@ -58,7 +58,7 @@ FORMAT_CONFIGS = {
 This is the final analysis of the image. Please provide your final determination based on all previous findings and analyses.
 The ELA output is important for understanding the authenticity of the PNG type image. Analyze the provided forensic maps (Texture Heatmap,Edge Sharpening Map, Color Distribution Map, ELA Map) to determine whether the image has been manipulated. Think step bty step.
 <think> reasoning process </think>
-<region>bbox_2d : {{[x1,y1,x2,y2]}}</region>
+<region>bbox_2d : {[x1,y1,x2,y2]}</region>
 <answer>yes/no</answer>""",
     "example": """
 <think>After reviewing all available evidence including ELA and texture heatmaps, the face boundary shows inconsistent compression artifacts and sharpened edges around the eye area.</think>

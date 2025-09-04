@@ -340,9 +340,13 @@ class QwenVLRolloutManager():
                 llm_raw_response = record['info']['llm_raw_response']
                 filtered_llm_raw_response = self._handle_special_tokens(llm_raw_response, prep_for_loss_mask=prep_for_loss_mask)
                 chat.append({"role": "assistant", "content": filtered_llm_raw_response})
+                # print("\033[92mAssistant response:\033[0m", filtered_llm_raw_response)
+                # print("\033[92m-----------------------------------------------\033[0m")
                 rewards.append(record['reward'])
             if i<len(history)-1 or not is_final:
                 chat.append({"role": "user", "content": record['obs_str']})
+                # print("\033[91mUser prompt:\033[0m", record['obs_str'])
+                # print("\033[91m-----------------------------------------------\033[0m")
                 if 'image_data' in record:
                     for img in record['image_data']:
                         image_data.append(img)

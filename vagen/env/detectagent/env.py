@@ -31,6 +31,8 @@ class DetectAgentEnv(BaseEnv):
         self.max_steps = self.config.get("max_steps", 5)
         self.current_step = 0
 
+        self.last_iou = None
+
         # formatter function for current prompt
         self.format_prompt_func = FORMAT_PROMPT_MAP.get(self.prompt_format, FORMAT_PROMPT_MAP.get("first_prompt"))
 
@@ -98,6 +100,17 @@ class DetectAgentEnv(BaseEnv):
         if self.prompt_format == "final_prompt":
             done = True
 
+        print("\033[94manswer_content:\033[0m", answer_content)
+        if answer_content in {"no", "yes"}:
+            gt_bbox = self.get_gt_bbox()
+            if gt_bbox is not None and answer_content == "yes":
+                step_reward += 3.0 * (6 - self.current_step)
+                print("\033[93mCorrectly identify manipulated image.\033[0m")
+            elif gt_bbox is None and answer_content == "no":
+                # step_reward -= 5.0
+                step_reward += 3.0 * (6 - self.current_step)
+                print("\033[93mCorrectly identify no manipulation image.\033[0m")
+                # print("step_reward:", step_reward)
         # 记录 assistant 的原始响应
         self._append_assistant_message(text=rst.get("llm_raw_response", action_str))
             
@@ -121,7 +134,7 @@ class DetectAgentEnv(BaseEnv):
 
         if tool_result != None and tool_result["status"] == "success":
             # 处理工具成功返回的结果
-            step_reward += 0.5
+            step_reward += 2
 
         region_content = (rst.get("region_content") or "").strip()
         gt_bbox = self.get_gt_bbox()
@@ -136,10 +149,16 @@ class DetectAgentEnv(BaseEnv):
                 # iou = iou if iou < 0.4 else 1
                 # step_reward += iou  
                 if iou < 0.4:
-                    step_reward += iou*2
+                    step_reward += iou*5.0  # if iou < 0.4, give partial reward
                 else:
-                    step_reward += 2.0  # if iou >= 0.4, give full reward
+                    step_reward += 5.0  # if iou >= 0.4, give full reward
 
+                if self.last_iou is not None and iou > self.last_iou:
+                    step_reward += 2.0
+                    print("\033[92m last iou\033[0m", self.last_iou)
+
+                self.last_iou = iou
+                print("Update last IoU:", iou)
                 print("\033[92m------------------------------------------------------\033[0m")
                 print(f"Predicted bbox: {pred_bbox}, GT bbox: {gt_bbox}, IoU :{iou}.")
                 print(f"IOU between GT and Pred bbox for step {self.current_step}: {iou}.")
@@ -347,13 +366,13 @@ class DetectAgentEnv(BaseEnv):
         text_parts: List[str] = []
         img_placeholders: List[str] = []
 
-        if last_assistant:
-            contents = last_assistant.get("content", [])
-            if isinstance(contents, dict):
-                contents = [contents]
-            for c in contents:
-                if c.get("type") == "text" and c.get("text"):
-                    text_parts.append(f"Assistant: {c['text']}")
+        # if last_assistant:
+        #     contents = last_assistant.get("content", [])
+        #     if isinstance(contents, dict):
+        #         contents = [contents]
+        #     for c in contents:
+        #         if c.get("type") == "text" and c.get("text"):
+        #             text_parts.append(f"Assistant: {c['text']}")
 
         if last_user:
             contents = last_user.get("content", [])
@@ -367,12 +386,14 @@ class DetectAgentEnv(BaseEnv):
                     except Exception:
                         pass
                 elif c.get("type") == "text" and c.get("text"):
-                    text_parts.append(f"User: {c['text']}")
+                    # text_parts.append(f"User: {c['text']}")
+                    text_parts.append(c["text"])
 
         obs_str = (" ".join(img_placeholders) + "\n" + "\n".join(text_parts)).strip()
 
         print("\033[91mObservation:\033[0m", obs_str)
         print("\033[91m------------------------------\033[0m")
+        print("\033[91mLen of <image>:", len(images), "\033[0m")
         # print("\033[94mMulti-modal data:\033[0m", {"<image>": images})
 
         return {
