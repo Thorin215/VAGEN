@@ -5,7 +5,7 @@ from huggingface_hub import HfApi, upload_folder
 HF_USER = "Davidwang215"
 
 # 本地父目录
-BASE_DIR = "/raid/users/wc/VAGEN/checkpoints/vagen_new_3b_full/test-masked_grpo-detectagent"
+BASE_DIR = "/raid/users/wc/VAGEN/checkpoints/vagen_7b_full_tool_step3/test-masked_grpo-detectagent"
 
 api = HfApi()
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 配置参数
-BASE_DIR="/raid/users/wc/VAGEN/checkpoints/vagen_7b_full_tool_step_data/test-masked_grpo-detectagent"
+BASE_DIR="/raid/users/wc/VAGEN/checkpoints/vagen_7b_full_tool_step4v2/test-masked_grpo-detectagent"
 MERGE_SCRIPT="/raid/users/wc/verl/scripts/model_merger.py"
 DRY_RUN=false  # 设置为true时只显示操作不会实际执行
 
